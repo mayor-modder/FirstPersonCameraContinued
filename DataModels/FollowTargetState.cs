@@ -24,17 +24,28 @@ namespace FirstPersonCameraContinued.DataModels
 
         public TEntity AttachmentTarget { get; private set; }
 
+        public int AttachmentRevision { get; private set; }
+
         public bool HasSubject => !_comparer.Equals(SelectedSubject, _nullEntity);
 
         public void SelectSubject(TEntity subject)
         {
             SelectedSubject = subject;
-            AttachmentTarget = subject;
+            SetAttachmentTarget(subject);
         }
 
         public void ResolveAttachmentTarget(TEntity target)
         {
-            AttachmentTarget = HasSubject ? target : _nullEntity;
+            SetAttachmentTarget(HasSubject ? target : _nullEntity);
+        }
+
+        private void SetAttachmentTarget(TEntity target)
+        {
+            if (_comparer.Equals(AttachmentTarget, target))
+                return;
+
+            AttachmentTarget = target;
+            AttachmentRevision++;
         }
     }
 }

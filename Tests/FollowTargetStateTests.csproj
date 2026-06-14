@@ -13,5 +13,6 @@
 
   <ItemGroup>
     <Compile Include="..\DataModels\FollowTargetState.cs" Link="FollowTargetState.cs" />
+    <Compile Include="..\DataModels\TransitStopNameFormatter.cs" Link="TransitStopNameFormatter.cs" />
   </ItemGroup>
 </Project>

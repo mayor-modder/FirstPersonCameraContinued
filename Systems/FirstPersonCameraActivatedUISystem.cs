@@ -475,7 +475,7 @@ namespace FirstPersonCameraContinued.Systems
                     float pos = allWaypoints[i].normalizedPosition;
                     if (pos <= midpointPosition)
                     {
-                        var (streetName, crossStreet) = GetStopStreetAndCrossStreet(allWaypoints[i].stopEntity);
+                        var (streetName, crossStreet) = GetStripMapStopName(allWaypoints[i].stopEntity, isMetroOrTrain);
                         displayedStations.Add((streetName, crossStreet, allWaypoints[i].position, allWaypoints[i].stopEntity));
                     }
                 }
@@ -499,14 +499,14 @@ namespace FirstPersonCameraContinued.Systems
 
                     if (include)
                     {
-                        var (streetName, crossStreet) = GetStopStreetAndCrossStreet(allWaypoints[i].stopEntity);
+                        var (streetName, crossStreet) = GetStripMapStopName(allWaypoints[i].stopEntity, isMetroOrTrain);
                         displayedStations.Add((streetName, crossStreet, allWaypoints[i].position, allWaypoints[i].stopEntity));
                     }
                 }
 
                 if (firstStationIndex >= 0)
                 {
-                    var (streetName, crossStreet) = GetStopStreetAndCrossStreet(allWaypoints[firstStationIndex].stopEntity);
+                    var (streetName, crossStreet) = GetStripMapStopName(allWaypoints[firstStationIndex].stopEntity, isMetroOrTrain);
                     displayedStations.Add((streetName, crossStreet, allWaypoints[firstStationIndex].position, allWaypoints[firstStationIndex].stopEntity));
                 }
             }
@@ -786,14 +786,15 @@ namespace FirstPersonCameraContinued.Systems
 
         private string GetVanillaStopName(Entity stopEntity)
         {
-            if (nameSystem.TryGetCustomName(stopEntity, out var customName))
+            string customName = GetCustomName(stopEntity);
+            if (!string.IsNullOrEmpty(customName))
             {
                 return customName;
             }
 
             if (BuildingUtils.GetAddress(EntityManager, stopEntity, out var road, out var number))
             {
-                string roadName = AbbreviateSuffix(nameSystem.GetRenderedLabelName(road));
+                string roadName = AbbreviateSuffix(SafeGetRenderedLabelName(road));
                 if (!string.IsNullOrEmpty(roadName))
                 {
                     return $"{number} {roadName}";
@@ -900,20 +901,26 @@ namespace FirstPersonCameraContinued.Systems
 
         private string FormatStationName(string streetName, string crossStreet, Dictionary<string, int> nameCount, Entity stopEntity)
         {
-            if (nameSystem.TryGetCustomName(stopEntity, out var customName))
+            string customName = GetCustomName(stopEntity);
+            if (!string.IsNullOrEmpty(customName))
             {
                 return customName;
             }
 
             if (EntityManager.TryGetComponent<Owner>(stopEntity, out var owner) && owner.m_Owner != Entity.Null)
             {
-                if (nameSystem.TryGetCustomName(owner.m_Owner, out var ownerCustomName))
+                string ownerCustomName = GetCustomName(owner.m_Owner);
+                if (!string.IsNullOrEmpty(ownerCustomName))
                 {
                     return ownerCustomName;
                 }
             }
 
+            streetName = TransitStopNameFormatter.NormalizeDisplayName(streetName);
             string baseName = GetStreetBaseName(streetName);
+            if (string.IsNullOrEmpty(baseName))
+                return TransitStopNameFormatter.DefaultStopName;
+
             if (GetDictionaryValueOrDefault(nameCount, baseName) > 1 && !string.IsNullOrEmpty(crossStreet))
             {
                 string crossBase = GetStreetBaseName(crossStreet);
@@ -959,8 +966,8 @@ namespace FirstPersonCameraContinued.Systems
             // fallback to stop name
             if (string.IsNullOrEmpty(streetName))
             {
-                try { streetName = nameSystem.GetRenderedLabelName(stopEntity); } catch { }
-                if (string.IsNullOrEmpty(streetName)) streetName = "Stop";
+                streetName = SafeGetRenderedLabelName(stopEntity);
+                if (string.IsNullOrEmpty(streetName)) streetName = TransitStopNameFormatter.DefaultStopName;
             }
 
             // find cross street
@@ -982,13 +989,57 @@ namespace FirstPersonCameraContinued.Systems
         {
             if (EntityManager.TryGetComponent<Aggregated>(roadEdge, out var aggregated))
             {
-                try
-                {
-                    return nameSystem.GetRenderedLabelName(aggregated.m_Aggregate);
-                }
-                catch { }
+                return SafeGetRenderedLabelName(aggregated.m_Aggregate);
             }
             return "";
+        }
+
+        private (string streetName, string crossStreet) GetStripMapStopName(Entity stopEntity, bool isMetroOrTrain)
+        {
+            if (!isMetroOrTrain)
+                return GetStopStreetAndCrossStreet(stopEntity);
+
+            return (
+                TransitStopNameFormatter.ChooseStopName(
+                    GetCustomName(stopEntity),
+                    GetOwnerCustomName(stopEntity)),
+                "");
+        }
+
+        private string GetCustomName(Entity entity)
+        {
+            if (entity == Entity.Null)
+                return "";
+
+            return nameSystem.TryGetCustomName(entity, out var customName)
+                ? TransitStopNameFormatter.NormalizeDisplayName(customName)
+                : "";
+        }
+
+        private string GetOwnerCustomName(Entity entity)
+        {
+            if (entity == Entity.Null)
+                return "";
+
+            if (EntityManager.TryGetComponent<Owner>(entity, out var owner) && owner.m_Owner != Entity.Null)
+                return GetCustomName(owner.m_Owner);
+
+            return "";
+        }
+
+        private string SafeGetRenderedLabelName(Entity entity)
+        {
+            if (entity == Entity.Null)
+                return "";
+
+            try
+            {
+                return TransitStopNameFormatter.NormalizeDisplayName(nameSystem.GetRenderedLabelName(entity));
+            }
+            catch
+            {
+                return "";
+            }
         }
 
         private float3 GetNodePosition(Entity node)

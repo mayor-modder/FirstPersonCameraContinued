@@ -58,7 +58,7 @@ namespace FirstPersonCameraContinued.Transforms
             _model = model;
             _manualFinalTransform = new ManualFinalTransform();
             _entityFollower = new EntityFollower( _model );
-            _followEntityFinalTransform = new FollowEntityFinalTransform( _entityFollower );
+            _followEntityFinalTransform = new FollowEntityFinalTransform( _entityFollower, RefreshScope );
             _entityManager = World.DefaultGameObjectInjectionWorld.EntityManager;
             FinalTransform = _manualFinalTransform;
             AddTransforms( );
@@ -95,9 +95,7 @@ namespace FirstPersonCameraContinued.Transforms
                     }
                 }
 
-                _model.Scope = DetermineScope( );
-                UpdateEffectToggle( );
-                OnScopeChanged?.Invoke( ); // Propagate event to listeners
+                RefreshScope( );
                 _model.LastFollowEntity = _model.FollowEntity;
             };
         }
@@ -136,25 +134,52 @@ namespace FirstPersonCameraContinued.Transforms
             _model.DisableEffects = _model.Mode == CameraMode.Disabled || _model.Scope != CameraScope.Citizen; 
         }
 
+        private Entity GetScopeEntity()
+        {
+            return _model.AttachmentTarget != Entity.Null ? _model.AttachmentTarget : _model.FollowEntity;
+        }
+
+        public void RefreshScope()
+        {
+            var previousScope = _model.Scope;
+            var previousVehicle = _model.ScopeVehicle;
+            var previousCitizen = _model.ScopeCitizen;
+
+            _model.Scope = DetermineScope( );
+            UpdateEffectToggle( );
+
+            if (previousScope != _model.Scope
+                || previousVehicle != _model.ScopeVehicle
+                || previousCitizen != _model.ScopeCitizen)
+            {
+                OnScopeChanged?.Invoke( );
+            }
+        }
+
         /// <summary>
         /// Determines camera scope from entity type
         /// </summary>
         /// <returns></returns>
         public CameraScope DetermineScope( )
         {
-            if ( _model.FollowEntity == Entity.Null )
+            var entity = GetScopeEntity( );
+
+            _model.ScopeCitizen = null;
+            _model.ScopeVehicle = VehicleType.Unknown;
+
+            if ( entity == Entity.Null )
                 return CameraScope.Default;
 
-            if ( CheckForCitizenScope( out var age ) )
+            if ( CheckForCitizenScope( entity, out var age ) )
             {
                 _model.ScopeCitizen = age;
                 return CameraScope.Citizen;
             }
-            else if ( _entityManager.HasComponent<Game.Creatures.Pet>( _model.FollowEntity ) )
+            else if ( _entityManager.HasComponent<Game.Creatures.Pet>( entity ) )
             {
                 return CameraScope.Pet;
             }
-            else if ( CheckForVehicleScope( out var vehicleType, out _ ) )
+            else if ( CheckForVehicleScope( entity, out var vehicleType, out _ ) )
             {
                 var isCar = ( vehicleType & VehicleType.Cars ) != 0;
                 var isVan = ( vehicleType & VehicleType.Vans ) != 0;
@@ -167,11 +192,11 @@ namespace FirstPersonCameraContinued.Transforms
             return CameraScope.Default;
         }
 
-        private bool CheckForCitizenScope( out CitizenAge citizenAge )
+        private bool CheckForCitizenScope( Entity entity, out CitizenAge citizenAge )
         {
             citizenAge = CitizenAge.Teen;
 
-            if ( _entityManager.TryGetComponent<Game.Creatures.Resident>( _model.FollowEntity, out var resident ) )
+            if ( _entityManager.TryGetComponent<Game.Creatures.Resident>( entity, out var resident ) )
             {
                 if ( resident.m_Citizen != Entity.Null &&
                     _entityManager.TryGetComponent<Citizen>( resident.m_Citizen, out var citizen ) )
@@ -187,7 +212,11 @@ namespace FirstPersonCameraContinued.Transforms
 
         public bool CheckForVehicleScope( out VehicleType vehicleType, out string translatedVehicleType )
         {
-            var entity = _model.FollowEntity;
+            return CheckForVehicleScope( GetScopeEntity( ), out vehicleType, out translatedVehicleType );
+        }
+
+        private bool CheckForVehicleScope( Entity entity, out VehicleType vehicleType, out string translatedVehicleType )
+        {
             var isVehicle = false;
 
             vehicleType = VehicleType.Unknown;
@@ -343,7 +372,7 @@ namespace FirstPersonCameraContinued.Transforms
 
             if (_entityManager.HasComponent<Game.Vehicles.PublicTransport>(entity))
             {
-                if (_entityManager.TryGetComponent<Game.Prefabs.PrefabRef>(_model.FollowEntity, out var prefabRefComponent))
+                if (_entityManager.TryGetComponent<Game.Prefabs.PrefabRef>(entity, out var prefabRefComponent))
                 {
                     if (_entityManager.TryGetComponent<Game.Prefabs.PublicTransportVehicleData>(prefabRefComponent.m_Prefab, out var publicTransportVehicleDataComponent))
                     {
