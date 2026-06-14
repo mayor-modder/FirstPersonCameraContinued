@@ -2,6 +2,7 @@
 using FirstPersonCameraContinued.DataModels;
 using FirstPersonCameraContinued.Enums;
 using Game.Citizens;
+using System;
 using Unity.Entities;
 using Unity.Mathematics;
 
@@ -14,12 +15,15 @@ namespace FirstPersonCameraContinued.Transformer.FinalTransforms
     {
         private float3 offset;
         private Entity lastFollow;
+        private int lastAttachmentRevision = -1;
 
         private readonly EntityFollower _entityFollower;
+        private readonly Action _refreshScope;
 
-        public FollowEntityFinalTransform(EntityFollower entityFollower)
+        public FollowEntityFinalTransform(EntityFollower entityFollower, Action refreshScope)
         {
             _entityFollower = entityFollower;
+            _refreshScope = refreshScope;
         }
 
         /// <summary>
@@ -32,10 +36,12 @@ namespace FirstPersonCameraContinued.Transformer.FinalTransforms
             if (!_entityFollower.TryGetPosition(out float3 pos, out Bounds3 bounds, out quaternion rot, out bool isTrain))
                 return;
 
-            // When the entity changes get the new offset
-            if (lastFollow != model.FollowEntity)
+            _refreshScope( );
+
+            if (lastFollow != model.FollowEntity || lastAttachmentRevision != model.FollowTarget.AttachmentRevision)
             {
                 lastFollow = model.FollowEntity;
+                lastAttachmentRevision = model.FollowTarget.AttachmentRevision;
                 GrabOffset(model);
             }
 
