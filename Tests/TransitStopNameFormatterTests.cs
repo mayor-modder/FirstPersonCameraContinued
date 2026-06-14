@@ -9,10 +9,10 @@ public class TransitStopNameFormatterTests
     public void ChooseStopNameUsesCustomNameBeforeTrackAssetLabel()
     {
         string name = TransitStopNameFormatter.ChooseStopName(
-            "Jacob Circle",
+            "Custom Stop",
             "Assets.NAME[Subway Track]");
 
-        Assert.Equal("Jacob Circle", name);
+        Assert.Equal("Custom Stop", name);
     }
 
     [Fact]
